@@ -1,0 +1,411 @@
+<?php
+date_default_timezone_set('Asia/Kolkata');
+
+$json_array = array();
+error_reporting(E_ALL);
+//ini_set('display_errors', 1);
+session_start();
+$json_array = array();
+if (!isset($_SESSION['login_details'])) {
+    $json_array['status'] = 401;
+    $json_array['message'] = "Session Logged Out";
+    echo json_encode($json_array);
+    exit();
+}
+
+$country_lat_lng = array(
+                        'india' => array(
+                                        'lat' => '23.249840', 'lng' => '77.280891',
+                                        'min_lat' => '6.5546079', 'max_lat' => '35.6745457',
+                                        'min_lng' => '68.1113787', 'max_lng' => '97.395561'
+                                    ),
+                        'japan' => array(
+                                        'lat' => '36.204824', 'lng' => '138.252924',
+                                        'min_lat' => '20.2145811', 'max_lat' => '45.7112046',
+                                        'min_lng' => '122.7141754', 'max_lng' => '154.205541'
+                                    )
+                    );
+
+include_once('obj_connection.php');
+
+// Get Country Lat Lng
+if (strtoupper($_SERVER['REQUEST_METHOD']) == 'POST' && isset($_POST['type']) && $_POST['type'] == 'country_lat_lng') {
+    $country = isset($_POST['country']) ? strtolower($_POST['country']) : 'india';
+    $json_array['status'] = 200;
+    $json_array['message'] = $country_lat_lng[$country];
+    echo json_encode($json_array);
+}
+
+// Get City Details
+elseif (strtoupper($_SERVER['REQUEST_METHOD']) == 'POST' && isset($_POST['type']) && $_POST['type'] == 'get_city_details') {    
+    $city = $con->query("select city from city_lat_long order by city");
+    
+    if ($city->num_rows > 0) {
+        $json_array['status'] = 200;
+        while ($rows = $city->fetch_assoc()) {
+            $json_array['message'][] = ucwords($rows['city']);
+        }
+    } else {
+        $json_array['status'] = 400;
+        $json_array['message'] = '';
+    }
+    echo json_encode($json_array);
+}
+
+// operators
+elseif (strtoupper($_SERVER['REQUEST_METHOD']) == 'POST' && isset($_POST['type']) && $_POST['type'] == 'op_drop_down') {
+    $country = isset($_POST['country']) ? strtolower($_POST['country']) : 'india';
+    
+    $cond = '';
+    if(isset($country_lat_lng[$country])) {
+        $cond = " and lat >= " . $country_lat_lng[$country]['min_lat'] . " and lat <= " . $country_lat_lng[$country]['max_lat'] . " and lon >= " . $country_lat_lng[$country]['min_lng'] . " and lon <= " . $country_lat_lng[$country]['max_lng'];
+    }
+
+    $op = $con->query("select distinct lower(SPN) as operator from black_box_datas where SPN is not null and SPN != '' and SPN != '(null)' $cond");
+    
+    if ($op->num_rows > 0) {
+        $json_array['status'] = 200;
+        while ($rows = $op->fetch_assoc()) {
+            $json_array['message'][] = ucwords($rows['operator']);
+        }
+    } else {
+        $json_array['status'] = 400;
+        $json_array['message'] = '';
+    }
+    echo json_encode($json_array);
+}
+
+// export csv data
+elseif (strtoupper($_SERVER['REQUEST_METHOD']) == 'POST' && isset($_POST['type']) && $_POST['type'] == 'export_csv_data') {
+    $country = isset($_POST['country']) ? strtolower($_POST['country']) : 'india';
+    $city = isset($_POST['city']) ? strtolower($_POST['city']) : '';
+    $op = isset($_POST['op']) ? "lower(SPN) = '".strtolower($_POST['op'])."'" : '';
+    $os = isset($_POST['os']) ? (($_POST['os']=='IOS') ? "lower(MAKE) = 'apple'" : "lower(MAKE) != 'apple'") : '';
+    $os = (empty($op)) ? $os : 'AND ' . $os;
+    
+    $start_ts = isset($_POST['start_dt']) ? strtotime($_POST['start_dt'].' 00:00:01').'000' : '';
+    $end_ts = isset($_POST['end_dt']) ? strtotime($_POST['end_dt'].' 23:59:59').'999' : '';
+    
+    $ts = '';
+    if(!empty($start_ts) && !empty($end_ts)) {
+        $ts = " AND (TIMESTAMP BETWEEN $start_ts AND $end_ts)";
+    }
+    
+    if(!empty($city)) {
+        $city_lat_lng = $con->query("select latitude, longitude from city_lat_long where lower(city) = '" . strtolower($city) . "'");
+        if ($city_lat_lng->num_rows > 0) {
+            while ($rows = $city_lat_lng->fetch_assoc()) {
+                $lat = $rows['latitude'];
+                $lng = $rows['longitude'];
+            }
+            $ts .= " and (3959 * acos (cos ( radians($lat) ) * cos( radians( lat ) ) * cos( radians( lon ) - radians($lng) ) + sin ( radians($lat) ) * sin( radians( lat ) ))) < 30";
+        }
+    }
+    
+    if(isset($country_lat_lng[$country])) {
+        $ts .= " and lat >= " . $country_lat_lng[$country]['min_lat'] . " and lat <= " . $country_lat_lng[$country]['max_lat'] . " and lon >= " . $country_lat_lng[$country]['min_lng'] . " and lon <= " . $country_lat_lng[$country]['max_lng'];
+    }
+    
+    $sql = "SELECT MAKE, MODEL, OS, appVersion,IMEI, TIMESTAMP, LAT, LON, ACCURACY, TECH, SUB_TECH, ASU, RSRP, RSCP, RX_LEVEL, RSRQ, ECIO, RX_QUAL, EARFCN,  UARFCN, ARFCN, SINR, MCC, MNC, LAC_TAC, CELL_ID, PSC_PCI, SPN, DATA_STATE, SERVICE_STATE, RNC, CQI, FREQ, BAND, TA, CALL_STATE, CALL_DURATION, TEST_STATE, RSSI, SS, MUTE_ON, MUTE_OF, BB_ID , call_drop, call_block FROM black_box_datas WHERE $op $os $ts";
+    $res = $con->query($sql);
+    
+    if ($res->num_rows > 0) {
+        $data = " MAKE, MODEL, OS, appVersion, IMEI, TIMESTAMP, LAT, LON, ACCURACY, TECH, SUB_TECH,ASU, RSRP, RSCP, RX_LEVEL, RSRQ, ECIO, RX_QUAL, EARFCN,  UARFCN, ARFCN, SINR, MCC, MNC, LAC_TAC, CELL_ID, PSC_PCI, SPN, DATA_STATE,SERVICE_STATE, RNC, CQI, FREQ, BAND, TA, CALL_STATE, CALL_DURATION, TEST_STATE, RSSI, SS, MUTE_ON, MUTE_OF, BB_ID , Call Drop , Call Block \n";
+
+        while ($row=$res->fetch_assoc()) {
+            $row['TIMESTAMP'] = (!empty($row['TIMESTAMP'])) ? date('Y-m-d H:i:s', substr_replace($row['TIMESTAMP'], "", -3)) : '';
+            $row['MUTE_ON'] = (!empty($row['MUTE_ON'])) ? date('Y-m-d H:i:s', substr_replace($row['MUTE_ON'], "", -3)) : '';
+            $comma_separated = implode(",", $row);
+            $data = $data.$comma_separated ;
+            $data = $data."\n";
+        }
+    } else {
+        $data = false;
+    }
+    echo $data;
+}
+
+// get call details
+elseif (strtoupper($_SERVER['REQUEST_METHOD']) == 'POST' && isset($_POST['type']) && $_POST['type'] == 'get_call_details') {
+    $block_call_max_threshold = 10; // in seconds
+    $drop_call_max_threshold = 180; // in seconds
+    
+    $country = isset($_POST['country']) ? strtolower($_POST['country']) : 'india';
+    $city = isset($_POST['city']) ? strtolower($_POST['city']) : '';
+    $trend = isset($_POST['trend']) ? $_POST['trend'] : '';
+    $op = isset($_POST['op']) ? "lower(SPN) = '".strtolower($_POST['op'])."'" : '';
+    $os = isset($_POST['os']) ? (($_POST['os']=='IOS') ? "lower(MAKE) = 'apple'" : "lower(MAKE) != 'apple'") : '';
+    $os = (empty($op)) ? $os : 'AND ' . $os;
+    
+    $start_ts = isset($_POST['start_dt']) ? strtotime($_POST['start_dt'].' 00:00:01').'000' : '';
+    $end_ts = isset($_POST['end_dt']) ? strtotime($_POST['end_dt'].' 23:59:59').'999' : '';
+    
+    $ts = '';
+    if(!empty($start_ts) && !empty($end_ts)) {
+        $ts = " AND (TIMESTAMP BETWEEN $start_ts AND $end_ts)";
+    }
+    
+    $lat = $lng = '';
+    if(!empty($city)) {
+        $city_lat_lng = $con->query("select latitude, longitude from city_lat_long where lower(city) = '" . strtolower($city) . "'");
+        if ($city_lat_lng->num_rows > 0) {
+            while ($rows = $city_lat_lng->fetch_assoc()) {
+                $lat = $rows['latitude'];
+                $lng = $rows['longitude'];
+            }
+            $ts .= " and (3959 * acos (cos ( radians($lat) ) * cos( radians( lat ) ) * cos( radians( lon ) - radians($lng) ) + sin ( radians($lat) ) * sin( radians( lat ) ))) < 30";
+        }
+    }
+    
+    if(isset($country_lat_lng[$country])) {
+        $ts .= " and lat >= " . $country_lat_lng[$country]['min_lat'] . " and lat <= " . $country_lat_lng[$country]['max_lat'] . " and lon >= " . $country_lat_lng[$country]['min_lng'] . " and lon <= " . $country_lat_lng[$country]['max_lng'];
+    } elseif(!empty($city)) {
+        
+    }
+    
+    // Total Calls
+    $sql_total_calls = "select count(distinct call_no) total_calls from black_box_datas WHERE CALL_STATE > 0 AND $op $os $ts";
+    $res_total_calls = $con->query($sql_total_calls);    
+    $total_calls = 0;
+    if ($res_total_calls->num_rows > 0) {
+        while ($row=$res_total_calls->fetch_assoc()) {
+            $total_calls = $row['total_calls'];
+        }
+    }
+    
+    // Drop & Block Calls
+    if(isset($_POST['os']) && $_POST['os'] == 'IOS') {
+        $sql_cdb_calls = "select count(call_no) total_calls, sum(call_block) block_calls, sum(call_drop) drop_calls from (select call_no, call_duration, states, if(FIND_IN_SET('3', states), 0, 1) as call_block, if(FIND_IN_SET('3', states), if(call_duration < $drop_call_max_threshold, 1, 0), 0) as call_drop from (select call_no, GROUP_CONCAT(distinct CALL_STATE SEPARATOR ',') states, TIME_TO_SEC(TIMEDIFF(FROM_UNIXTIME(SUBSTR(max(TIMESTAMP), 1, 10)), FROM_UNIXTIME(SUBSTR(min(TIMESTAMP), 1, 10)))) call_duration from black_box_datas where MAKE = 'Apple' and call_no > 0 and CALL_STATE > 0 and $op $ts group by call_no)tbl)tbl2";
+    } else {
+        $sql_cdb_calls = "select count(call_no) total_calls, sum(call_block) block_calls, sum(call_drop) drop_calls from (select call_no, call_duration, states, if(call_duration < $block_call_max_threshold, 1, 0) as call_block, if(call_duration > $block_call_max_threshold and call_duration < $drop_call_max_threshold, 1, 0) as call_drop from (select call_no, GROUP_CONCAT(distinct CALL_STATE SEPARATOR ',') states, TIME_TO_SEC(TIMEDIFF(FROM_UNIXTIME(SUBSTR(max(TIMESTAMP), 1, 10)), FROM_UNIXTIME(SUBSTR(min(TIMESTAMP), 1, 10)))) call_duration from black_box_datas where MAKE != 'Apple' and call_no > 0 and CALL_STATE > 0 and $op $ts group by call_no)tbl)tbl2";
+    }
+    $res_cdb_calls = $con->query($sql_cdb_calls);
+    $block_calls = $drop_calls = 0;
+    if ($res_cdb_calls->num_rows > 0) {
+        while ($row=$res_cdb_calls->fetch_assoc()) {
+            $block_calls = $row['block_calls'];
+            $drop_calls = $row['drop_calls'];
+        }
+    }
+    $call_drop_rate = number_format($drop_calls/($total_calls-$block_calls), 2) . ' %';
+    $call_block_rate = number_format($block_calls/$total_calls, 2) . ' %';
+    
+    // Mute Calls
+    $sql_mute_calls = "select count(distinct call_no) mute_calls, min(MUTE_OF)/1000 min_mute_sec, max(MUTE_OF)/1000 max_mute_sec, avg(MUTE_OF)/1000 avg_mute_sec from black_box_datas WHERE MUTE_ON > 0 AND $op $os $ts";
+    $res_mute_calls = $con->query($sql_mute_calls);
+    $mute_calls = $min_mute_sec = $max_mute_sec = $avg_mute_sec = 0;
+    if ($res_mute_calls->num_rows > 0) {
+        while ($row=$res_mute_calls->fetch_assoc()) {
+            $mute_calls = $row['mute_calls'];
+            $min_mute_sec = number_format($row['min_mute_sec'], 1);
+            $max_mute_sec = number_format($row['max_mute_sec'], 1);
+            $avg_mute_sec = number_format($row['avg_mute_sec'], 1);
+        }
+    }
+    
+    $mute_call_rate = 0;
+    $mute_call_rate = number_format($mute_calls/$total_calls, 2) . ' %';
+    
+    // Get Mute count
+    if($trend == 'day') {
+        $no_of_days_or_hr = 31;
+        $sql_mute_calls_time_wise = "select count(distinct call_no) mute_calls, day(FROM_UNIXTIME(SUBSTR(TIMESTAMP, 1, 10))) day from black_box_datas WHERE MUTE_ON > 0 AND $op $os $ts group by day";
+    } elseif($trend == 'hour') {
+        $no_of_days_or_hr = 24;
+        $sql_mute_calls_time_wise = "select count(distinct call_no) mute_calls, hour(FROM_UNIXTIME(SUBSTR(TIMESTAMP, 1, 10))) hour from black_box_datas WHERE MUTE_ON > 0 AND $op $os $ts group by hour";
+    }
+    $res_mute_calls_time_wise = $con->query($sql_mute_calls_time_wise);
+    $mute_calls_time_wise = false;
+    if ($res_mute_calls_time_wise->num_rows > 0) {
+        while ($row=$res_mute_calls_time_wise->fetch_assoc()) {
+            if($trend == 'day') {
+                $mute_calls_time_wise[$row['day']] = number_format($row['mute_calls']/$total_calls, 1);
+            } elseif($trend == 'hour') {
+                $mute_calls_time_wise[$row['hour']] = number_format($row['mute_calls']/$total_calls, 1);
+            }
+        }
+    }
+    
+    for($i=0; $i<$no_of_days_or_hr; $i++) {
+        if(!array_key_exists($i, $mute_calls_time_wise)) {
+            $mute_calls_time_wise[$i] = 0;
+        }
+    }
+    
+    // Mute Duration Histogram
+    $sql_mute_duration_histogram = "select min(total_mute_duration) min_mute_duration, max(total_mute_duration) max_mute_duration, avg(total_mute_duration) avg_mute_duration, sum(IF(total_mute_duration >= 0 and total_mute_duration < 2, 1, 0)) AS range_1, sum(IF(total_mute_duration >= 2 and total_mute_duration < 4, 1, 0)) AS range_2, sum(IF(total_mute_duration >= 4 and total_mute_duration < 6, 1, 0)) AS range_3, sum(IF(total_mute_duration >= 6 and total_mute_duration < 8, 1, 0)) AS range_4, sum(IF(total_mute_duration >= 8 and total_mute_duration < 10, 1, 0)) AS range_5, sum(IF(total_mute_duration >= 10 and total_mute_duration < 12, 1, 0)) AS range_6, sum(IF(total_mute_duration >= 12 and total_mute_duration < 14, 1, 0)) AS range_7, sum(IF(total_mute_duration >= 14 and total_mute_duration < 16, 1, 0)) AS range_8, sum(IF(total_mute_duration >= 16, 1, 0)) AS range_9 from (select call_no, sum(MUTE_OF)/1000 as total_mute_duration from black_box_datas where MUTE_OF > 0 AND $op $os $ts group by call_no)tbl";
+    $res_mute_duration_histogram = $con->query($sql_mute_duration_histogram);    
+    $total_mute_calls = $min_mute_duration = $max_mute_duration = $avg_mute_duration = 0;
+    if ($res_mute_duration_histogram->num_rows > 0) {
+        while ($row=$res_mute_duration_histogram->fetch_assoc()) {
+            for($range=1; $range<=9; $range++) {
+                $mute_duration_histogram[] = $row['range_'.$range];
+            }
+            $min_mute_duration = number_format($row['min_mute_duration'], 2);
+            $max_mute_duration = number_format($row['max_mute_duration'], 2);
+            $avg_mute_duration = number_format($row['avg_mute_duration'], 2);
+        }
+    } else {
+        $mute_duration_histogram = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    }
+    
+    // Coverage V/S Quality V/S Mute
+    $sql_cov_qua_mute = "select count(1) as mute_samples, min(mute_duration) min_mute_duration, max(mute_duration) max_mute_duration, avg(mute_duration) avg_mute_duration, GROUP_CONCAT(IF(mute_duration >= 0 and mute_duration <= 2, CONCAT('[', RSRP, ',', SINR, ']'), NULL) SEPARATOR ',') as range_1, GROUP_CONCAT(IF(mute_duration > 2 and mute_duration <= 5, CONCAT('[', RSRP, ',', SINR, ']'), NULL) SEPARATOR ',') as range_2, GROUP_CONCAT(IF(mute_duration > 5 and mute_duration <= 10, CONCAT('[', RSRP, ',', SINR, ']'), NULL) SEPARATOR ',') as range_3, GROUP_CONCAT(IF(mute_duration > 10 and mute_duration <= 15, CONCAT('[', RSRP, ',', SINR, ']'), NULL) SEPARATOR ',') as range_4, GROUP_CONCAT(IF(mute_duration > 15, CONCAT('[', RSRP, ',', SINR, ']'), NULL) SEPARATOR ',') as range_5 from (select call_no, RSRP, SINR, MUTE_OF/1000 as mute_duration from black_box_datas where MUTE_OF > 0 and RSRP is not null and RSRP != '' and RSRP != '-' and SINR is not null and SINR != '' and SINR != '-' AND $op $os $ts)tbl";
+    $res_cov_qua_mute = $con->query($sql_cov_qua_mute);    
+    $mute_samples = $min_mute_duration_cov = $max_mute_duration_cov = $avg_mute_duration_cov = 0;
+    if ($res_cov_qua_mute->num_rows > 0) {
+        while ($row=$res_cov_qua_mute->fetch_assoc()) {
+            for($range=1; $range<=5; $range++) {
+                if($row['range_'.$range] != null && $row['range_'.$range] != '') {
+                    $array1 = array("[", "]");
+                    $array2 = array("", "");
+                    $cov_qua[] = str_replace($array1, $array2, explode("],[", $row['range_'.$range]));
+                } else {
+                        $cov_qua[] = [];
+                }
+            }
+            $mute_samples = $row['mute_samples'];
+            $min_mute_duration_cov = number_format($row['min_mute_duration'], 2);
+            $max_mute_duration_cov = number_format($row['max_mute_duration'], 2);
+            $avg_mute_duration_cov = number_format($row['avg_mute_duration'], 2);
+        }
+    } else {
+        $cov_qua = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]];
+    }
+    
+    // Mute Locations
+    $sql_mute_locations = "select lat, lon, FROM_UNIXTIME(SUBSTR(MUTE_ON, 1, 10), '%Y-%m-%d %H:%i:%s') ts, RSRP, SINR, CELL_ID from black_box_datas where MUTE_OF > 0 and lat is not null and lat != '' and lat != '-' and lon is not null and lon != '' and lon != '-' and $op $os $ts";
+    $res_mute_locations = $con->query($sql_mute_locations);    
+    $mute_locations = false;
+    if ($res_mute_locations->num_rows > 0) {
+        while ($row=$res_mute_locations->fetch_assoc()) {
+            $mute_locations[] = array('lat' => $row['lat'], 'lon' => $row['lon'], 'ts' => $row['ts'], 'rsrp' => $row['RSRP'], 'sinr' => $row['SINR'], 'cell_id' => $row['CELL_ID']);
+        }
+    }
+    
+    // Drop & Block Locations
+    if(isset($_POST['os']) && $_POST['os'] == 'IOS') {
+        $sql_cdb_locations = "select call_no, call_duration, lat, lon, ts, RSRP, SINR, CELL_ID, states, if(FIND_IN_SET('3', states), 0, 1) as call_block, if(FIND_IN_SET('3', states), if(call_duration < $drop_call_max_threshold, 1, 0), 0) as call_drop from (select call_no, GROUP_CONCAT(distinct CALL_STATE SEPARATOR ',') states, TIME_TO_SEC(TIMEDIFF(FROM_UNIXTIME(SUBSTR(max(TIMESTAMP), 1, 10)), FROM_UNIXTIME(SUBSTR(min(TIMESTAMP), 1, 10)))) call_duration, avg(lat) lat, avg(lon) lon, TIME_TO_SEC(TIMEDIFF(FROM_UNIXTIME(SUBSTR(max(TIMESTAMP), 1, 10)), FROM_UNIXTIME(SUBSTR(min(TIMESTAMP), 1, 10), '%Y-%m-%d %H:%i:%s'))) ts, avg(RSRP) RSRP, avg(SINR) SINR, avg(CELL_ID) CELL_ID from black_box_datas where MAKE = 'Apple' and call_no > 0 and CALL_STATE > 0 and lat is not null and lat != '' and lat != '-' and lon is not null and lon != '' and lon != '-' and $op $ts group by call_no)tbl";
+    } else {
+        $sql_cdb_locations = "select call_no, call_duration, lat, lon, ts, RSRP, SINR, CELL_ID, states, if(call_duration < $block_call_max_threshold, 1, 0) as call_block, if(call_duration > $block_call_max_threshold and call_duration < $drop_call_max_threshold, 1, 0) as call_drop from (select call_no, GROUP_CONCAT(distinct CALL_STATE SEPARATOR ',') states, TIME_TO_SEC(TIMEDIFF(FROM_UNIXTIME(SUBSTR(max(TIMESTAMP), 1, 10)), FROM_UNIXTIME(SUBSTR(min(TIMESTAMP), 1, 10)))) call_duration, avg(lat) lat, avg(lon) lon, FROM_UNIXTIME(SUBSTR(min(TIMESTAMP), 1, 10), '%Y-%m-%d %H:%i:%s') ts, avg(RSRP) RSRP, avg(SINR) SINR, avg(CELL_ID) CELL_ID from black_box_datas where MAKE != 'Apple' and call_no > 0 and CALL_STATE > 0 and lat is not null and lat != '' and lat != '-' and lon is not null and lon != '' and lon != '-' and $op $ts group by call_no)tbl";
+    }
+    $res_cdb_locations = $con->query($sql_cdb_locations);    
+    $drop_locations = $block_locations = false;
+    if ($res_cdb_locations->num_rows > 0) {
+        while ($row=$res_cdb_locations->fetch_assoc()) {
+            if($row['call_block']) {
+                $block_locations[] = array('lat' => $row['lat'], 'lon' => $row['lon'], 'ts' => $row['ts'], 'rsrp' => $row['RSRP'], 'sinr' => $row['SINR'], 'cell_id' => $row['CELL_ID']);
+            } elseif($row['call_drop']) {
+                $drop_locations[] = array('lat' => $row['lat'], 'lon' => $row['lon'], 'ts' => $row['ts'], 'rsrp' => $row['RSRP'], 'sinr' => $row['SINR'], 'cell_id' => $row['CELL_ID']);
+            }
+        }
+    }
+    
+    // Call Connect
+    $sql_call_connect = "select count(call_no) samples, avg(cst)/1000 as avg_cst, min(cst)/1000 min_cst, max(cst)/1000 max_cst from (select call_no, avg(setup_time) as cst from black_box_datas where setup_time > 0 and setup_time <= 50000 and $op $os $ts group by call_no)tbl";
+    $res_call_connect = $con->query($sql_call_connect);    
+    $call_connect = $call_connect_samples = $min_call_connect = $max_call_connect = $avg_call_connect = 0;
+    if ($res_call_connect->num_rows > 0) {
+        while ($row=$res_call_connect->fetch_assoc()) {
+            $call_connect = number_format($row['avg_cst'], 2) . ' sec';
+            $call_connect_samples = $row['samples'];
+            $min_call_connect = number_format($row['min_cst'], 2);
+            $max_call_connect = number_format($row['max_cst'], 2);
+            $avg_call_connect = number_format($row['avg_cst'], 2);
+        }
+    }
+    
+    // Call Connect Histogram
+    $sql_call_connect_histogram = "select sum(IF(cst >= 0 and cst < 2, 1, 0))/count(call_no) AS range_1, sum(IF(cst >= 2 and cst < 4, 1, 0))/count(call_no) AS range_2, sum(IF(cst >= 4 and cst < 6, 1, 0))/count(call_no) AS range_3, sum(IF(cst >= 6 and cst < 8, 1, 0))/count(call_no) AS range_4, sum(IF(cst >= 8 and cst < 10, 1, 0))/count(call_no) AS range_5, sum(IF(cst >= 10 and cst < 12, 1, 0))/count(call_no) AS range_6, sum(IF(cst >= 12 and cst < 14, 1, 0))/count(call_no) AS range_7, sum(IF(cst >= 14 and cst < 16, 1, 0))/count(call_no) AS range_8, sum(IF(cst >= 16, 1, 0))/count(call_no) AS range_9 from (select call_no, avg(setup_time)/1000 as cst from black_box_datas where setup_time > 0 and setup_time <= 50000 and $op $os $ts group by call_no)tbl";
+    $res_call_connect_histogram = $con->query($sql_call_connect_histogram);
+    if ($res_call_connect_histogram->num_rows > 0) {
+        while ($row=$res_call_connect_histogram->fetch_assoc()) {
+            $call_connect_histogram = $row;
+        }
+    } else {
+        $call_connect_histogram = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    }
+        
+    $json_array['status'] = 200;
+    $json_array['message']['lat'] = $lat;
+    $json_array['message']['lng'] = $lng;
+    $json_array['message']['call_connect'] = $call_connect;
+    $json_array['message']['total_calls'] = $total_calls;
+    $json_array['message']['call_drop_rate'] = $call_drop_rate;
+    $json_array['message']['call_block_rate'] = $call_block_rate;
+    $json_array['message']['mute_calls'] = $mute_calls;
+    $json_array['message']['mute_call_rate'] = $mute_call_rate;    
+    $json_array['message']['min_mute_sec'] = $min_mute_sec;
+    $json_array['message']['max_mute_sec'] = $max_mute_sec;
+    $json_array['message']['avg_mute_sec'] = $avg_mute_sec;
+    $json_array['message']['mute_calls_time_wise'] = $mute_calls_time_wise;
+    $json_array['message']['mute_duration_histogram'] = $mute_duration_histogram;
+    $json_array['message']['min_mute_duration'] = $min_mute_duration;
+    $json_array['message']['max_mute_duration'] = $max_mute_duration;
+    $json_array['message']['avg_mute_duration'] = $avg_mute_duration;
+    $json_array['message']['cov_qua_mute'] = $cov_qua;
+    $json_array['message']['mute_samples'] = $mute_samples;
+    $json_array['message']['min_mute_duration_cov'] = $min_mute_duration_cov;
+    $json_array['message']['max_mute_duration_cov'] = $max_mute_duration_cov;
+    $json_array['message']['avg_mute_duration_cov'] = $avg_mute_duration_cov;
+    $json_array['message']['mute_locations'] = $mute_locations;
+    $json_array['message']['block_locations'] = $block_locations;
+    $json_array['message']['drop_locations'] = $drop_locations;
+    $json_array['message']['call_connect_samples'] = $call_connect_samples;
+    $json_array['message']['min_call_connect'] = $min_call_connect;
+    $json_array['message']['max_call_connect'] = $max_call_connect;
+    $json_array['message']['avg_call_connect'] = $avg_call_connect;
+    $json_array['message']['call_connect_histogram'] = $call_connect_histogram;
+    
+    echo json_encode($json_array);
+}
+
+// get network details for map
+elseif (strtoupper($_SERVER['REQUEST_METHOD']) == 'POST' && isset($_POST['type']) && $_POST['type'] == 'get_network_details') {
+    $country = isset($_POST['country']) ? strtolower($_POST['country']) : 'india';
+    $city = isset($_POST['city']) ? strtolower($_POST['city']) : '';
+    $op = isset($_POST['op']) ? "lower(SPN) = '".strtolower($_POST['op'])."'" : '';
+    $os = isset($_POST['os']) ? (($_POST['os']=='IOS') ? "lower(MAKE) = 'apple'" : "lower(MAKE) != 'apple'") : '';
+    $os = (empty($op)) ? $os : 'AND ' . $os;
+    
+    $start_ts = isset($_POST['start_dt']) ? strtotime($_POST['start_dt'].' 00:00:01').'000' : '';
+    $end_ts = isset($_POST['end_dt']) ? strtotime($_POST['end_dt'].' 23:59:59').'999' : '';
+    
+    $ts = '';
+    if(!empty($start_ts) && !empty($end_ts)) {
+        $ts = " AND (TIMESTAMP BETWEEN $start_ts AND $end_ts)";
+    }
+    
+    if(!empty($city)) {
+        $city_lat_lng = $con->query("select latitude, longitude from city_lat_long where lower(city) = '" . strtolower($city) . "'");
+        if ($city_lat_lng->num_rows > 0) {
+            while ($rows = $city_lat_lng->fetch_assoc()) {
+                $lat = $rows['latitude'];
+                $lng = $rows['longitude'];
+            }
+            $ts .= " and (3959 * acos (cos ( radians($lat) ) * cos( radians( lat ) ) * cos( radians( lon ) - radians($lng) ) + sin ( radians($lat) ) * sin( radians( lat ) ))) < 30";
+        }
+    }
+    
+    if(isset($country_lat_lng[$country])) {
+        $ts .= " and lat >= " . $country_lat_lng[$country]['min_lat'] . " and lat <= " . $country_lat_lng[$country]['max_lat'] . " and lon >= " . $country_lat_lng[$country]['min_lng'] . " and lon <= " . $country_lat_lng[$country]['max_lng'];
+    }
+    
+    $sql_rsrp = "select TIMESTAMP, LAT, LON, RSRP, RSRQ, SINR, MUTE_ON FROM black_box_datas WHERE LAT REGEXP '[0-9]' and LON REGEXP '[0-9]' and RSRP REGEXP '[0-9]' and RSRQ REGEXP '[0-9]' and SINR REGEXP '[0-9]' and $op $os $ts";
+    $res = $con->query($sql);
+    
+    $mute_locations = false;
+    if ($res->num_rows > 0) {
+        while ($row=$res->fetch_assoc()) {
+            
+            $mute_locations[] = array('lat' => $row['lat'], 'lon' => $row['lon'], 'ts' => $row['ts'], 'rsrp' => $row['RSRP'], 'sinr' => $row['SINR'], 'cell_id' => $row['CELL_ID']);
+        }
+    }
+    
+    $json_array['message']['call_connect_histogram'] = $call_connect_histogram;
+    
+    echo json_encode($json_array);
+}
+mysqli_close($con);
+exit();
+?>

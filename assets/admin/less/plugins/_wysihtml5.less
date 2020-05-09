@@ -1,0 +1,25 @@
+/* ========================================================================
+ * WYSIHTML5
+ * ======================================================================= */
+textarea{
+  &.rounded{
+    + input{
+      + .wysihtml5-sandbox{
+        .border-radius(@rounded) !important;
+      }
+    }
+  }
+  &.circle{
+    + input{
+      + .wysihtml5-sandbox{
+        .border-radius(@circle) !important;
+      }
+    }
+  }
+  + input{
+    + .wysihtml5-sandbox{
+      .border-radius(0px) !important;
+      border: 1px solid @border-color !important;
+    }
+  }
+}

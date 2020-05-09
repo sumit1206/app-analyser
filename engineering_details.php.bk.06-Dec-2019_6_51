@@ -1,0 +1,261 @@
+<?php include('header.php'); ?>
+<section id="page-content">
+    <div class="body-content animated fadeIn">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="panel rounded shadow">
+                    <div class="panel-heading">
+                        <div class="pull-left">
+                            <h3 class="panel-title" style="color: #fff">Filters</h3>
+                        </div>
+                        <div class="clearfix"></div>
+                    </div>
+                    <div class="panel-body">
+                        <!--<form class="form-inline" id="frm_chart" name="frm_chart" method="POST">-->
+                            <div class="form-body">
+                                <div class="col-md-3">
+                                    <select class="form-control select_width" id="city_drop_down">
+                                        <option value="">City</option>
+                                        <option value="Mumbai">Mumbai</option>
+                                        <option value="Delhi">Delhi</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <select class="form-control select_width" id="os_drop_down">
+                                        <option value="">Operating System</option>
+                                        <option value="Android">Android</option>
+                                        <option value="IOS">IOS</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <select class="form-control select_width" id="op_drop_down">
+                                        <option value="">Operator</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <select class="form-control select_width" id="trend_drop_down">
+                                        <option value="">Trend</option>
+                                        <option value="day">Day-wise</option>
+                                        <option value="hour">Hour-wise</option>
+                                        <option value="custom">Custom</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="data" name="yearmonth" id="yearmonth" autocomplete="off" value="" class="form-control select_width" placeholder="Date">
+                                    <input type="data" name="dayyearmonth" id="dayyearmonth" autocomplete="off" value="" class="form-control select_width" style="display: none;" placeholder="Date">
+                                    <div class="input-group input-daterange" style="display: none;">
+                                        <input type="text" class="form-control" id="start_dt" value="" autocomplete="off" placeholder="Date">
+                                        <div class="input-group-addon">to</div>
+                                        <input type="text" class="form-control" id="end_dt" value="" autocomplete="off" placeholder="Date">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="clearfix"></div>
+                            <div class="form-body">
+                                <div class="col-md-12 text-center">
+                                    <input type="hidden" name="country" id="country" value="<?php echo $_SESSION['login_details']['country']; ?>">
+                                    <button type="button" name="btn_map" id="btn_map" class="btn btn-info">Submit</button>
+                                    <button type="button" name="btn_export" id="btn_export" class="btn btn-info">Export</button>
+                                </div>
+                            </div>                            
+                        <!--</form>-->                        
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <div class="panel">
+                    <div class="panel-heading">
+                        <div class="pull-left">
+                            <h3 class="panel-title">MAP</h3>
+                        </div>
+                        <div class="clearfix"></div>
+                    </div>
+                    <div class="panel-body">
+                        <div id="map" style="width:100%; height:500px;"></div>
+                        <div id="legend_rsrp" class="legend"><h3>Serving Cell RSRP</h3></div>
+                        <div id="legend_rsrq" class="legend"><h3>Serving Cell RSRQ</h3></div>
+                        <div id="legend_sinr" class="legend"><h3>RS SINR (dB)</h3></div>
+                        <!--<div id="legend_mute" class="legend"><h3>Mute Call Duration (sec)</h3></div>-->
+                        <div id="legend_mute" class="legend"><h3>Events</h3></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <div class="panel">
+                    <div class="panel-heading">
+                        <div class="pull-left">
+                            <h3 class="panel-title">Drop & Block Call Details</h3>
+                        </div>
+                        <div class="clearfix"></div>
+                    </div>
+                    <div class="panel-body">
+                        <table id="drop_block_rf_tbl" class="table table-striped table-bordered nowrap"></table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <div class="panel">
+                    <div class="panel-heading">
+                        <div class="pull-left">
+                            <h3 class="panel-title">Mute Call Details</h3>
+                        </div>
+                        <div class="clearfix"></div>
+                    </div>
+                    <div class="panel-body">
+                        <table id="mute_rf_tbl" class="table table-striped table-bordered nowrap"></table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <style>
+        .gmnoprint span {display: none;}
+        .gmnoprint a {display: none;}
+        img[src="https://maps.gstatic.com/mapfiles/api-3/images/google4.png"] {display: none;}
+        
+        .legend {
+            font-family: Arial, sans-serif;
+            background: #fff;
+            padding: 10px;
+            margin: 10px;
+            border: 0px solid #000;
+            box-shadow: 2px 2px;
+            font-size: 13px;
+            line-height: 21px;
+            cursor: pointer;
+        }
+        .legend h3 {
+            margin-top: 0;
+            font-size: 15px;
+            font-weight: bold;
+        }
+        .legend img {
+            vertical-align: middle;
+        }
+    </style>    
+    
+    <script type='text/javascript' src="./high_charts-6.1.1/code/highcharts.js"></script>
+    
+    <script>
+        var country = $("#country").val();
+        var map, marker, legend;
+        var markers = [];
+        
+//        var legend_types = ['rsrp', 'rsrq', 'sinr', 'mute'];    
+        var legend_types = ['rsrp', 'rsrq', 'sinr'];
+        var ranges = {}, legend_colors = {};
+        ranges.rsrp = ranges.rsrq = ranges.sinr = ranges.mute = [];
+        legend_colors.rsrp = legend_colors.rsrq = legend_colors.sinr = legend_colors.mute = [];
+
+        ranges.rsrp = ['[Min, -110)', '[-110, -100)', '[-100, -90)', '[-90, -80)', '[-80, Max]'];
+        ranges.rsrq = ['[Min, -20)', '[-20, -17)', '[-17, -13)', '[-13, -9)', '[-9, Max]'];
+        ranges.sinr = ['[Min, 0)', '[0, 5)', '[5, 10)', '[10, 15)', '[15, 20)', '[20, Max]'];
+        ranges.mute = ['0-2', '2-5', '5-10', '10-15', '>15'];
+        
+        legend_colors.rsrp = ['rgb(238, 32, 32)', 'rgb(63, 63, 227)', 'rgb(247, 247, 32)', 'rgb(111, 234, 111)', 'rgb(12, 208, 12)'];
+        legend_colors.rsrq = ['rgb(238, 32, 32)', 'rgb(63, 63, 227)', 'rgb(247, 247, 32)', 'rgb(111, 234, 111)', 'rgb(12, 208, 12)'];
+        legend_colors.sinr = ['rgb(238, 32, 32)', 'rgb(247, 160, 2)', 'rgb(63, 63, 227)', 'rgb(247, 247, 32)', 'rgb(111, 234, 111)', 'rgb(12, 208, 12)'];
+        legend_colors.mute = ['rgb(129, 182, 34)', 'rgb(250, 208, 44)', 'rgb(4, 118, 208)', 'rgb(255, 131, 0)', 'rgb(248, 56, 57)'];
+        
+        function initAutocomplete() {
+            $.ajax({
+                type:'POST',
+                url:'ajax/save_frm_data.php',
+                data:{type: 'country_lat_lng', country: country},
+                dataType:'json',
+                beforeSend :function() {
+        //            jQuery('#txt_city').find("option:eq(0)").html("Please wait..");
+                },
+                success:function(jdata) {
+                    if(jdata.status = 200) {
+                        var country_lat_lng = jdata.message;
+                        
+                        map = new google.maps.Map(document.getElementById('map'), {
+//                            center: new google.maps.LatLng(23.249840,77.280891),
+                            center: new google.maps.LatLng(country_lat_lng['lat'],country_lat_lng['lng']),
+                            zoom: 5,
+                            mapTypeId: google.maps.MapTypeId.ROADMAP,
+                            mapTypeControl: true,
+                            mapTypeControlOptions: {
+                                style: google.maps.MapTypeControlStyle.DROPDOWN_MENU,
+                                mapTypeIds: ['roadmap']
+                            },
+                            streetViewControl: false,
+                            zoomControl: true,
+                            zoomControlOptions: {
+                                position: google.maps.ControlPosition.LEFT_BOTTOM
+                            },
+                            mapTypeControl: false
+                        });
+                        
+                        var tooltip_div = document.getElementById('compare');
+                        map.controls[google.maps.ControlPosition.LEFT_TOP].push(tooltip_div);
+                        
+                        var scale = 8;
+                        var opacity = 1;
+                        
+                        for (var i = 0; i < legend_types.length; i++) {
+                            legend = document.getElementById('legend_'+legend_types[i]);
+                            
+                            for (var j = 0; j < ranges[legend_types[i]].length; j++) {
+                                var div = document.createElement('div');
+                                div.id = legend_types[i] + '_' + (j+1);
+        //                        var chk = '<input checked="checked" type="checkbox" id="drop" onchange="toggleMarkers(\'drop\')">';
+                                div.innerHTML = "<img src='data:image/svg+xml;utf8,<svg viewBox=\"0 0 100 100\" height=\""+ 8*scale/8 + "\" width=\""+ 8*scale/8 + "\" xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"50\" cy=\"50\" r=\"50\" style=\"fill: " + legend_colors[legend_types[i]][j] + "; stroke: white; stroke-width: 1;\" opacity=\""+ opacity+ "\"/></svg>' style='padding-left: 5px;'> " + ranges[legend_types[i]][j] + "<span id='" + legend_types[i] + '_count_' + (j+1) + "'> ( 0 ) </span><span id='" + legend_types[i] + '_percentage_' + (j+1) + "'> ( 0% ) </span>";
+                                legend.appendChild(div);
+                            }
+                            if(legend_types[i] == 'mute') {
+                                map.controls[google.maps.ControlPosition.BOTTOM_RIGHT].push(legend);
+                            } else {
+                                map.controls[google.maps.ControlPosition.TOP_RIGHT].push(legend);
+                            }
+                        }
+                        
+                        legend = document.getElementById('legend_mute');
+                        var div = document.createElement('div');                        
+                        div.id = 'call_mute_uplink_event';
+                        div.innerHTML = "<img src='data:image/svg+xml;utf8,<svg viewBox=\"0 0 100 100\" height=\""+ 8*scale/8 + "\" width=\""+ 8*scale/8 + "\" xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"50\" cy=\"50\" r=\"50\" style=\"fill: rgb(218, 6, 249); stroke: white; stroke-width: 1;\" opacity=\""+ opacity+ "\"/></svg>' style='padding-left: 5px;'> " + 'Uplink Mutes';
+                        legend.appendChild(div);
+                        var div = document.createElement('div');
+                        div.id = 'call_mute_downlink_event';
+                        div.innerHTML = "<img src='data:image/svg+xml;utf8,<svg viewBox=\"0 0 100 100\" height=\""+ 8*scale/8 + "\" width=\""+ 8*scale/8 + "\" xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"50\" cy=\"50\" r=\"50\" style=\"fill: rgb(4, 225, 153); stroke: white; stroke-width: 1;\" opacity=\""+ opacity+ "\"/></svg>' style='padding-left: 5px;'> " + 'Downlink Mutes';
+                        legend.appendChild(div);
+                        map.controls[google.maps.ControlPosition.BOTTOM_RIGHT].push(legend);
+                        
+//                        showHideLegends();
+                    }
+                }
+            });            
+        }        
+    </script>
+    
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC_JhaxTmPtaUbtNhWnAiDPCBK50pcB7HU&libraries=places&callback=initAutocomplete" async defer></script>
+    
+    <link href="assets/admin/css/dataTables.bootstrap.min.css" rel="stylesheet">
+    <script src="assets/admin/js/jquery.dataTables.min.js"></script>
+    <script src="assets/admin/js/dataTables.bootstrap.min.js"></script>
+
+    <script type="text/javascript">
+//    $(document).ready(function() {
+//        $('#drop_block_rf_tbl').DataTable({
+//            "paging":   true,
+//            "ordering": true,
+//            "info":     true,
+//            "order": [[ 1, "asc" ]]
+//        });
+//        $('#mute_rf_tbl').DataTable({
+//            "paging":   true,
+//            "ordering": true,
+//            "info":     true,
+//            "order": [[ 1, "asc" ]]
+//        });
+//    });
+    </script>
+    <?php include('footer.php'); ?>

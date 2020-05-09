@@ -1,0 +1,143 @@
+/* ========================================================================
+ * COMPONENTS
+ * ======================================================================== */
+/* ========================================================================
+ * CONTEXTUAL CLASSES TEXT
+ * ======================================================================== */
+.text-center {
+  text-align: center;
+}
+
+/* ========================================================================
+ * FOREGROUND COLOR
+ * ======================================================================== */
+.fg-red {
+  color: #E9573F;
+}
+
+.fg-blue {
+  color: #00B1E1;
+}
+
+.fg-yellow {
+  color: #F6BB42;
+}
+
+.fg-green {
+  color: #8CC152;
+}
+
+/* ========================================================================
+ * INNER ELEMENT
+ * ======================================================================== */
+.inner {
+  width: 960px;
+  margin: auto;
+  position: relative;
+}
+
+@media (max-width: 800px) {
+  .inner {
+    width: 100%;
+  }
+}
+/* ========================================================================
+ * LOADING ANIMATION
+ * ======================================================================== */
+#loading {
+  margin: auto;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  z-index: 999999999;
+}
+#loading .loading-inner {
+  position: absolute;
+  top: 40%;
+  margin: 0 auto;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+#loading .loading-inner img {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+/* ========================================================================
+ * DIMENSION
+ * ======================================================================== */
+.no-padding {
+  padding: 0px !important;
+}
+
+.no-margin {
+  margin: 0px !important;
+}
+
+/* ========================================================================
+ * ARROW
+ * ======================================================================== */
+.arrow {
+  -moz-transition: all 0.3s;
+  -o-transition: all 0.3s;
+  -webkit-transition: all 0.3s;
+  transition: all 0.3s;
+  position: absolute;
+  width: 36px;
+  height: 35px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 2px solid #bbbbbb;
+  color: #bbbbbb;
+  right: 10px;
+  font-size: 25px;
+  bottom: 5px;
+  -moz-border-radius: 50%;
+  -webkit-border-radius: 50%;
+  border-radius: 50%;
+  line-height: 30px;
+}
+.arrow:hover {
+  border: 2px solid white;
+  color: white;
+}
+.arrow:focus {
+  border: 2px solid #bbbbbb;
+  color: #bbbbbb;
+}
+
+/* ========================================================================
+ * BACK TOP
+ * ======================================================================== */
+#back-top {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  cursor: pointer;
+  color: #EEE;
+  text-align: center;
+  background-color: rgba(89, 95, 102, 0.7);
+  display: block;
+  z-index: 1000;
+  width: 40px;
+  height: 40px;
+  -moz-border-radius: 50%;
+  -webkit-border-radius: 50%;
+  border-radius: 50%;
+  -moz-transition: all 0.5s ease-in-out 0s;
+  -o-transition: all 0.5s ease-in-out 0s;
+  -webkit-transition: all 0.5s ease-in-out;
+  -webkit-transition-delay: 0s;
+  transition: all 0.5s ease-in-out 0s;
+}
+#back-top:hover {
+  background: #81B71A;
+  box-shadow: 0 0 0 6px #a9e33a;
+}
+#back-top i {
+  font-size: 20px;
+  line-height: 35px;
+}
